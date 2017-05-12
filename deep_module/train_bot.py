@@ -71,24 +71,14 @@ def pre_process_data(reviews, labels, polarity_cutoff=0.1, min_count=10):
 
 
 # convert string reviews to vectors
-def update_input_layer(review):
+def update_input_layer(review, word2index, vocab):
+    vocab_size = len(vocab)
     layer_0 = np.zeros((1, vocab_size))
     for word in review.split(" "):
-        layer_0[0][word2index[word]] += 1
+        if word in word2index.keys():
+            layer_0[0][word2index[word]] += 1
     return layer_0
 
-
-# fix random seed for reproducibility
-seed = 7
-np.random.seed(seed)
-
-top_words = 5000
-(X_train, y_train), (X_test, y_test) = imdb.load_data(num_words=top_words)
-
-# pad data set to a maximum review length in words
-max_words = 500
-X_train = sequence.pad_sequences(X_train, maxlen=max_words)
-X_test = sequence.pad_sequences(X_test, maxlen=max_words)
 
 # start code
 g = open('reviews.txt', 'r')  # What we know!
@@ -126,10 +116,17 @@ for i, word in enumerate(vocab):
     word2index[word] = i
 
 for k in range(4):
-    l0 = update_input_layer(reviews[k])
-    print(l0[0], np.sum(l0[0]), len(l0[0]))
+    l0 = update_input_layer(reviews[k], word2index, vocab)
+    print('old', l0[0], np.sum(l0[0]), len(l0[0]))
 
 # pre-process text data
+review_vocab, label_vocab, reduced_word2index, label2index = pre_process_data(reviews, labels)
+print(len(review_vocab))
+for k in range(4):
+    l0 = update_input_layer(reviews[k], reduced_word2index, review_vocab)
+    print('new', l0[0], np.sum(l0[0]), len(l0[0]))
+
+
 '''
 # create the model
 model = Sequential()
