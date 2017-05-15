@@ -1,12 +1,12 @@
 from collections import Counter
 import numpy as np
+import sklearn
 
 from keras.datasets import imdb
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import Flatten
-from keras.layers.convolutional import Conv1D
-from keras.layers.convolutional import MaxPooling1D
+from keras.layers import Convolution1D, MaxPooling1D
 from keras.layers.embeddings import Embedding
 from keras.preprocessing import sequence
 
@@ -80,6 +80,18 @@ def update_input_layer(review, word2index, vocab):
     return layer_0
 
 
+# generator for reviews and labels
+def review_label_generator(reviews, labels, word2index, vocab, batch_size=4):
+    vocab_size = len(vocab)
+    layer_0 = np.zeros((batch_size, vocab_size))
+    while 1:
+        for offset in range(0, int(np.floor(num_samples/batch_size)), batch_size): 
+            for word in review.split(" "):
+                if word in word2index.keys():
+                    layer_0[0][word2index[word]] += 1
+            yield layer_0
+
+
 # start code
 g = open('reviews.txt', 'r')  # What we know!
 reviews = list(map(lambda x: x[:-1],g.readlines()))
@@ -103,8 +115,8 @@ for i in range(len(reviews)):
             negative_counts[word] += 1
             total_counts[word] += 1
 
+print(len(reviews),len(labels))
 print('1asd', reviews[0], labels[0])
-
 print('1asd', reviews[10], labels[10])
 
 vocab = set(total_counts.keys())
@@ -119,6 +131,7 @@ for k in range(4):
     l0 = update_input_layer(reviews[k], word2index, vocab)
     print('old', l0[0], np.sum(l0[0]), len(l0[0]))
 
+
 # pre-process text data
 review_vocab, label_vocab, reduced_word2index, label2index = pre_process_data(reviews, labels)
 print(len(review_vocab))
@@ -127,21 +140,20 @@ for k in range(4):
     print('new', l0[0], np.sum(l0[0]), len(l0[0]))
 
 
-'''
+
 # create the model
 model = Sequential()
-model.add(Embedding(top_words, 32, input_length=max_words))
-model.add(Conv1D(filters=32, kernel_size=3, padding='same', activation='relu'))
-model.add(MaxPooling1D(pool_size=2))
+#model.add(Embedding(top_words, 32, input_length=max_words))
+model.add(Convolution1D(input_dim=len(review_vocab), nb_filter=32, filter_length=3, border_mode='same', activation='relu'))
+model.add(MaxPooling1D(pool_length=2))
 model.add(Flatten())
 model.add(Dense(250, activation='relu'))
 model.add(Dense(1, activation='sigmoid'))
-model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+model.compile(loss='crossentropy', optimizer='adam', metrics=['accuracy'])
 print(model.summary())
 
 # Fit the model
-model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=2, batch_size=128)
+#model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=2, batch_size=128)
 # Final evaluation of the model
-scores = model.evaluate(X_test, y_test, verbose=0)
-print("Accuracy: %.2f%%" % (scores[1]*100))
-'''
+#scores = model.evaluate(X_test, y_test, verbose=0)
+#print("Accuracy: %.2f%%" % (scores[1]*100))
