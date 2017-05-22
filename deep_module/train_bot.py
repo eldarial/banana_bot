@@ -6,8 +6,8 @@ from keras.datasets import imdb
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import Flatten
-from keras.layers import Convolution1D, MaxPooling1D
-from keras.layers.embeddings import Embedding
+from keras.layers.convolutional import Conv1D
+from keras.layers.pooling import MaxPooling1D
 from keras.preprocessing import sequence
 
 
@@ -71,7 +71,7 @@ def pre_process_data(reviews, labels, polarity_cutoff=0.1, min_count=10):
 
 
 # convert string reviews to vectors
-def update_input_layer(review, word2index, vocab):
+def encode_review(review, word2index, vocab):
     vocab_size = len(vocab)
     layer_0 = np.zeros((1, vocab_size))
     for word in review.split(" "):
@@ -82,78 +82,89 @@ def update_input_layer(review, word2index, vocab):
 
 # generator for reviews and labels
 def review_label_generator(reviews, labels, word2index, vocab, batch_size=4):
-    vocab_size = len(vocab)
-    layer_0 = np.zeros((batch_size, vocab_size))
-    while 1:
+    x_batch = []
+    y_batch = []
+    num_samples = len(reviews)
+    # while 1:
+    for kl in range(1):
+        sklearn.utils.shuffle(reviews, labels)
         for offset in range(0, int(np.floor(num_samples/batch_size)), batch_size): 
-            for word in review.split(" "):
-                if word in word2index.keys():
-                    layer_0[0][word2index[word]] += 1
-            yield layer_0
+            batch_samples = reviews[offset:offset + batch_size]
+            batch_labels = labels[offset:offset + batch_size]
+            for each_sample, each_label in zip(batch_samples, batch_labels):
+                x_batch.append(encode_review(each_sample, word2index, vocab))
+                if each_label == 'POSITIVE':
+                    y_batch.append(1)
+                else:
+                    y_batch.append(0)
+            x_train = np.array(x_batch)
+            y_train = np.array(y_batch)
+    yield x_train, y_train
 
 
-# start code
-g = open('reviews.txt', 'r')  # What we know!
-reviews = list(map(lambda x: x[:-1],g.readlines()))
-g.close()
+def main():
+    # start code
+    g = open('reviews.txt', 'r')  # What we know!
+    reviews = list(map(lambda x: x[:-1],g.readlines()))
+    g.close()
 
-g = open('labels.txt', 'r')  # What we WANT to know!
-labels = list(map(lambda x: x[:-1].upper(),g.readlines()))
-g.close()
+    g = open('labels.txt', 'r')  # What we WANT to know!
+    labels = list(map(lambda x: x[:-1].upper(),g.readlines()))
+    g.close()
 
-positive_counts = Counter()
-negative_counts = Counter()
-total_counts = Counter()
+    positive_counts = Counter()
+    negative_counts = Counter()
+    total_counts = Counter()
 
-for i in range(len(reviews)):
-    if labels[i] == 'POSITIVE':
-        for word in reviews[i].split(" "):
-            positive_counts[word] += 1
-            total_counts[word] += 1
-    else:
-        for word in reviews[i].split(" "):
-            negative_counts[word] += 1
-            total_counts[word] += 1
+    for i in range(len(reviews)):
+        if labels[i] == 'POSITIVE':
+            for word in reviews[i].split(" "):
+                positive_counts[word] += 1
+                total_counts[word] += 1
+        else:
+            for word in reviews[i].split(" "):
+                negative_counts[word] += 1
+                total_counts[word] += 1
 
-print(len(reviews),len(labels))
-print('1asd', reviews[0], labels[0])
-print('1asd', reviews[10], labels[10])
+    print(len(reviews),len(labels))
+    print('1asd', reviews[0], labels[0])
+    print('1asd', reviews[10], labels[10])
 
-vocab = set(total_counts.keys())
-vocab_size = len(vocab)
-print(vocab_size)
-word2index = {}
+    vocab = set(total_counts.keys())
+    vocab_size = len(vocab)
+    print(vocab_size)
+    word2index = {}
 
-for i, word in enumerate(vocab):
-    word2index[word] = i
+    for i, word in enumerate(vocab):
+        word2index[word] = i
 
-for k in range(4):
-    l0 = update_input_layer(reviews[k], word2index, vocab)
-    print('old', l0[0], np.sum(l0[0]), len(l0[0]))
+    for k in range(4):
+        l0 = encode_review(reviews[k], word2index, vocab)
+        print('old', l0[0], np.sum(l0[0]), len(l0[0]))
 
+    # pre-process text data
+    review_vocab, label_vocab, reduced_word2index, label2index = pre_process_data(reviews, labels)
+    print(len(review_vocab))
+    for k in range(4):
+        l0 = encode_review(reviews[k], reduced_word2index, review_vocab)
+        print('new', l0[0], np.sum(l0[0]), len(l0[0]))
 
-# pre-process text data
-review_vocab, label_vocab, reduced_word2index, label2index = pre_process_data(reviews, labels)
-print(len(review_vocab))
-for k in range(4):
-    l0 = update_input_layer(reviews[k], reduced_word2index, review_vocab)
-    print('new', l0[0], np.sum(l0[0]), len(l0[0]))
+    # create the model
+    model = Sequential()
+    # model.add(Embedding(top_words, 32, input_length=max_words)) len(review_vocab)
+    model.add(Conv1D(input_dim=len(review_vocab), filters=32, kernel_size=3, strides=1, padding='same', activation='relu'))
+    model.add(MaxPooling1D(pool_size=2))
+    # model.add(Flatten())
+    model.add(Dense(250, activation='relu'))
+    model.add(Dense(1, activation='sigmoid'))
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    print(model.summary())
 
+    # Fit the model
+    # model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=2, batch_size=128)
+    # Final evaluation of the model
+    # scores = model.evaluate(X_test, y_test, verbose=0)
+    # print("Accuracy: %.2f%%" % (scores[1]*100))
 
-
-# create the model
-model = Sequential()
-#model.add(Embedding(top_words, 32, input_length=max_words))
-model.add(Convolution1D(input_dim=len(review_vocab), nb_filter=32, filter_length=3, border_mode='same', activation='relu'))
-model.add(MaxPooling1D(pool_length=2))
-model.add(Flatten())
-model.add(Dense(250, activation='relu'))
-model.add(Dense(1, activation='sigmoid'))
-model.compile(loss='crossentropy', optimizer='adam', metrics=['accuracy'])
-print(model.summary())
-
-# Fit the model
-#model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=2, batch_size=128)
-# Final evaluation of the model
-#scores = model.evaluate(X_test, y_test, verbose=0)
-#print("Accuracy: %.2f%%" % (scores[1]*100))
+if __name__ == "__main__":
+    main()
