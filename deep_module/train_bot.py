@@ -1,14 +1,14 @@
 from collections import Counter
 import numpy as np
 import sklearn
+from sklearn.model_selection import train_test_split
 
-from keras.datasets import imdb
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import Flatten
 from keras.layers.convolutional import Conv1D
 from keras.layers.pooling import MaxPooling1D
-from keras.preprocessing import sequence
+from keras.callbacks import ModelCheckpoint
 
 
 # function to create word2index based on reviews in the dataset
@@ -82,28 +82,32 @@ def encode_review(review, word2index, vocab):
 
 # generator for reviews and labels
 def review_label_generator(reviews, labels, word2index, vocab, batch_size=4):
-    x_batch = []
-    y_batch = []
     num_samples = len(reviews)
     # while 1:
+    print("info", num_samples, batch_size)
     for kl in range(1):
         sklearn.utils.shuffle(reviews, labels)
-        for offset in range(0, int(np.floor(num_samples/batch_size)), batch_size): 
+        for offset in range(0, int(np.floor(num_samples/batch_size)), batch_size):
+            x_batch = []
+            y_batch = []
             batch_samples = reviews[offset:offset + batch_size]
             batch_labels = labels[offset:offset + batch_size]
             for each_sample, each_label in zip(batch_samples, batch_labels):
-                x_batch.append(encode_review(each_sample, word2index, vocab))
+                x_batch.append(np.transpose(np.array(encode_review(each_sample, word2index, vocab))))
                 if each_label == 'POSITIVE':
-                    y_batch.append(1)
+                    y_batch.append(np.array([0, 1]))
                 else:
-                    y_batch.append(0)
+                    y_batch.append(np.array([1, 0]))
             x_train = np.array(x_batch)
+            # x_train = np.transpose(x_train)
             y_train = np.array(y_batch)
-    yield x_train, y_train
+            yield x_train, y_train
 
 
 def main():
     # start code
+    bs = 4
+
     g = open('reviews.txt', 'r')  # What we know!
     reviews = list(map(lambda x: x[:-1],g.readlines()))
     g.close()
@@ -130,6 +134,10 @@ def main():
     print('1asd', reviews[0], labels[0])
     print('1asd', reviews[10], labels[10])
 
+    train_reviews, val_reviews, train_labels, val_labels = train_test_split(reviews, labels,
+                                                                            test_size=0.2, random_state=42)
+
+    print('now', val_labels[:10], train_labels[:10])
     vocab = set(total_counts.keys())
     vocab_size = len(vocab)
     print(vocab_size)
@@ -143,25 +151,41 @@ def main():
         print('old', l0[0], np.sum(l0[0]), len(l0[0]))
 
     # pre-process text data
-    review_vocab, label_vocab, reduced_word2index, label2index = pre_process_data(reviews, labels)
+    review_vocab, label_vocab, reduced_word2index, label2index = pre_process_data(train_reviews, train_labels)
     print(len(review_vocab))
     for k in range(4):
         l0 = encode_review(reviews[k], reduced_word2index, review_vocab)
         print('new', l0[0], np.sum(l0[0]), len(l0[0]))
 
+    # x_custom, y_custom = review_label_generator(reviews, labels, reduced_word2index, review_vocab)
+    # for kl in range(4):
+    #    print('custom', x_custom.shape,x_custom[kl], y_custom[kl])
+
     # create the model
     model = Sequential()
     # model.add(Embedding(top_words, 32, input_length=max_words)) len(review_vocab)
-    model.add(Conv1D(input_dim=len(review_vocab), filters=32, kernel_size=3, strides=1, padding='same', activation='relu'))
+    model.add(Conv1D(input_shape=(len(review_vocab), 1), filters=32,
+                     kernel_size=3, strides=1,
+                     padding='same', activation='relu'))
     model.add(MaxPooling1D(pool_size=2))
-    # model.add(Flatten())
+    model.add(Flatten())
     model.add(Dense(250, activation='relu'))
-    model.add(Dense(1, activation='sigmoid'))
+    model.add(Dense(2, activation='softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     print(model.summary())
 
+    model_path = './model.h5'
+    train_generator = review_label_generator(reviews, labels, reduced_word2index, review_vocab, bs)
+    val_generator = review_label_generator(val_reviews, val_labels, reduced_word2index, review_vocab, bs)
+
+    checkpoint = ModelCheckpoint(model_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+    callbacks_list = [checkpoint]
+
     # Fit the model
     # model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=2, batch_size=128)
+    model.fit_generator(train_generator, validation_data=val_generator, validation_steps=(len(val_reviews)/bs),
+                        steps_per_epoch=(len(train_reviews)/bs), callbacks=callbacks_list, epochs=3)
+    model.save(model_path)
     # Final evaluation of the model
     # scores = model.evaluate(X_test, y_test, verbose=0)
     # print("Accuracy: %.2f%%" % (scores[1]*100))
