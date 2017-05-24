@@ -1,6 +1,7 @@
 from collections import Counter
 import numpy as np
 import sklearn
+import pickle
 from sklearn.model_selection import train_test_split
 
 from keras.models import Sequential
@@ -11,7 +12,7 @@ from keras.layers.pooling import MaxPooling1D
 from keras.callbacks import ModelCheckpoint
 
 
-# function to create word2index based on reviews in the dataset
+# function to create word2index and vocabulary based on all strings from the dataset
 def pre_process_data(reviews, labels, polarity_cutoff=0.1, min_count=10):
         positive_counts = Counter()
         negative_counts = Counter()
@@ -70,6 +71,17 @@ def pre_process_data(reviews, labels, polarity_cutoff=0.1, min_count=10):
         return review_vocab, label_vocab, word2index, label2index
 
 
+# Function to save parameters used to transform strings to vectors
+def save_word2vec_parameters(review_vocab, word2index, prefix='train'):
+    path_vocab = './{}_vocab.pkl'.format(prefix)
+    with open(path_vocab, 'wb') as output:
+        pickle.dump(review_vocab, output, pickle.HIGHEST_PROTOCOL)
+    path_word2index = './{}_word2index.pkl'.format(prefix)
+    with open(path_word2index, 'wb') as output:
+        pickle.dump(word2index, output, pickle.HIGHEST_PROTOCOL)
+    print("saved word2vec parameters")
+
+
 # convert string reviews to vectors
 def encode_review(review, word2index, vocab):
     vocab_size = len(vocab)
@@ -83,9 +95,9 @@ def encode_review(review, word2index, vocab):
 # generator for reviews and labels
 def review_label_generator(reviews, labels, word2index, vocab, batch_size=4):
     num_samples = len(reviews)
-    # while 1:
-    print("info", num_samples, batch_size)
-    for kl in range(1):
+    # print("info", num_samples, batch_size)
+    # for kl in range(1):
+    while 1:
         sklearn.utils.shuffle(reviews, labels)
         for offset in range(0, int(np.floor(num_samples/batch_size)), batch_size):
             x_batch = []
@@ -102,6 +114,7 @@ def review_label_generator(reviews, labels, word2index, vocab, batch_size=4):
             # x_train = np.transpose(x_train)
             y_train = np.array(y_batch)
             yield x_train, y_train
+            # return x_train, y_train
 
 
 def main():
@@ -152,6 +165,7 @@ def main():
 
     # pre-process text data
     review_vocab, label_vocab, reduced_word2index, label2index = pre_process_data(train_reviews, train_labels)
+    save_word2vec_parameters(review_vocab, reduced_word2index)
     print(len(review_vocab))
     for k in range(4):
         l0 = encode_review(reviews[k], reduced_word2index, review_vocab)
@@ -174,8 +188,8 @@ def main():
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     print(model.summary())
 
-    model_path = './model.h5'
-    train_generator = review_label_generator(reviews, labels, reduced_word2index, review_vocab, bs)
+    model_path = './model_bot.h5'
+    train_generator = review_label_generator(train_reviews, train_labels, reduced_word2index, review_vocab, bs)
     val_generator = review_label_generator(val_reviews, val_labels, reduced_word2index, review_vocab, bs)
 
     checkpoint = ModelCheckpoint(model_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
@@ -186,6 +200,7 @@ def main():
     model.fit_generator(train_generator, validation_data=val_generator, validation_steps=(len(val_reviews)/bs),
                         steps_per_epoch=(len(train_reviews)/bs), callbacks=callbacks_list, epochs=3)
     model.save(model_path)
+    print("finished training")
     # Final evaluation of the model
     # scores = model.evaluate(X_test, y_test, verbose=0)
     # print("Accuracy: %.2f%%" % (scores[1]*100))
