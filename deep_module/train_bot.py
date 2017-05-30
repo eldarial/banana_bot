@@ -2,6 +2,7 @@ from collections import Counter
 import numpy as np
 import sklearn
 import pickle
+import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
 from keras.models import Sequential
@@ -176,34 +177,35 @@ def main():
     #    print('custom', x_custom.shape,x_custom[kl], y_custom[kl])
 
     # create the model
-    model = Sequential()
-    # model.add(Embedding(top_words, 32, input_length=max_words)) len(review_vocab)
-    model.add(Conv1D(input_shape=(len(review_vocab), 1), filters=32,
+    with tf.device('/cpu:0'):
+        model = Sequential()
+        # model.add(Embedding(top_words, 32, input_length=max_words)) len(review_vocab)
+        model.add(Conv1D(input_shape=(len(review_vocab), 1), filters=32,
                      kernel_size=3, strides=1,
                      padding='same', activation='relu'))
-    model.add(MaxPooling1D(pool_size=2))
-    model.add(Flatten())
-    model.add(Dense(250, activation='relu'))
-    model.add(Dense(2, activation='softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    print(model.summary())
+        model.add(MaxPooling1D(pool_size=2))
+        model.add(Flatten())
+        model.add(Dense(250, activation='relu'))
+        model.add(Dense(2, activation='softmax'))
+        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+        print(model.summary())
 
-    model_path = './model_bot.h5'
-    train_generator = review_label_generator(train_reviews, train_labels, reduced_word2index, review_vocab, bs)
-    val_generator = review_label_generator(val_reviews, val_labels, reduced_word2index, review_vocab, bs)
+        model_path = './model_bot.h5'
+        train_generator = review_label_generator(train_reviews, train_labels, reduced_word2index, review_vocab, bs)
+        val_generator = review_label_generator(val_reviews, val_labels, reduced_word2index, review_vocab, bs)
 
-    checkpoint = ModelCheckpoint(model_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-    callbacks_list = [checkpoint]
+        checkpoint = ModelCheckpoint(model_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+        callbacks_list = [checkpoint]
 
-    # Fit the model
-    # model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=2, batch_size=128)
-    model.fit_generator(train_generator, validation_data=val_generator, validation_steps=(len(val_reviews)/bs),
+        # Fit the model
+        # model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=2, batch_size=128)
+        model.fit_generator(train_generator, validation_data=val_generator, validation_steps=(len(val_reviews)/bs),
                         steps_per_epoch=(len(train_reviews)/bs), callbacks=callbacks_list, epochs=3)
-    model.save(model_path)
-    print("finished training")
-    # Final evaluation of the model
-    # scores = model.evaluate(X_test, y_test, verbose=0)
-    # print("Accuracy: %.2f%%" % (scores[1]*100))
+        model.save(model_path)
+        print("finished training")
+        # Final evaluation of the model
+        # scores = model.evaluate(X_test, y_test, verbose=0)
+        # print("Accuracy: %.2f%%" % (scores[1]*100))
 
 if __name__ == "__main__":
     main()
